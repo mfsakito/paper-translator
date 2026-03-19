@@ -1,10 +1,14 @@
 [project]
 name = "pdf-translator"
 version = "0.1.0"
-description = "Add your description here"
+description = "学術論文PDFのレイアウト維持翻訳ツール"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "google-genai>=1.68.0",
-    "python-dotenv>=1.2.2",
+    "pymupdf",
+    "google-genai",
+    "python-dotenv",
 ]
+
+[tool.uv]
+required-environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]

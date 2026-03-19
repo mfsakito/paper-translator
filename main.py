@@ -2,9 +2,7 @@ import argparse
 import os
 import sys
 
-import fitz
-
-from modules.extractor import extract_pdf_blocks, load_state, save_state
+from modules.extractor import extract_pdf_blocks
 from modules.translator import translate_blocks
 from modules.builder import build_pdf
 from modules.evaluator import evaluate_translation
@@ -53,47 +51,33 @@ def main():
     name, ext = os.path.splitext(base_name)
     output_pdf = os.path.join("output", f"{name}_translated{ext}")
 
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
-        print(f"\n=== Pipeline Run (Attempt {attempt}/{max_retries}) ===")
-
-        # 1. Extract (suppress MuPDF noise)
-        saved = suppress_mupdf_output()
-        extract_pdf_blocks(input_pdf, state_file, limit)
-        restore_output(saved)
-
-        # 2. Translate
-        translate_blocks(state_file)
-
-        # 3. Build (suppress MuPDF noise)
-        saved = suppress_mupdf_output()
-        success = build_pdf(input_pdf, state_file, output_pdf)
-        restore_output(saved)
-        if not success:
-            print("Failed to build PDF. Exiting...")
-            sys.exit(1)
-
-        # 4. Evaluate (suppress MuPDF noise)
-        saved = suppress_mupdf_output()
-        accuracy, failed_blocks = evaluate_translation(output_pdf, state_file)
-        restore_output(saved)
-
-        if accuracy >= 80.0:
-            print(f"\nTarget accuracy achieved ({accuracy:.1f}%). Translation completed!")
-            break
-        else:
-            print(f"\nAccuracy ({accuracy:.1f}%) is below 80%. Initiating self-correction...")
-            if attempt < max_retries:
-                state = load_state(state_file)
-                for bid in failed_blocks:
-                    if bid in state:
-                        print(f"  Flagging block {bid} for re-translation...")
-                        state[bid]["status"] = "pending"
-                        state[bid]["retry_count"] += 1
-                save_state(state, state_file)
-                print("Retrying pipeline...\n")
-            else:
-                print("Max retries reached. Exiting with suboptimal accuracy.")
+    print("\n=== Pipeline Run ===")
+    
+    # 1. Extract (suppress MuPDF noise)
+    saved = suppress_mupdf_output()
+    extract_pdf_blocks(input_pdf, state_file, limit)
+    restore_output(saved)
+    
+    # 2. Translate
+    translate_blocks(state_file)
+    
+    # 3. Build (suppress MuPDF noise)
+    saved = suppress_mupdf_output()
+    success = build_pdf(input_pdf, state_file, output_pdf)
+    restore_output(saved)
+    if not success:
+        print("Failed to build PDF. Exiting...")
+        sys.exit(1)
+        
+    # 4. Evaluate (suppress MuPDF noise)
+    saved = suppress_mupdf_output()
+    accuracy, failed_blocks = evaluate_translation(output_pdf, state_file)
+    restore_output(saved)
+    
+    if accuracy >= 80.0:
+        print(f"\nTarget accuracy achieved ({accuracy:.1f}%). Translation completed!")
+    else:
+        print(f"\nAccuracy ({accuracy:.1f}%) is below 80%. Pipeline finished.")
 
 
 if __name__ == "__main__":

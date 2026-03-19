@@ -36,7 +36,7 @@ modules/
 
 ```bash
 # 依存パッケージのインストール
-uv pip install pymupdf google-genai python-dotenv
+uv add pymupdf google-genai python-dotenv
 ```
 
 ### API Keyの設定

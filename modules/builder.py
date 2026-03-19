@@ -41,15 +41,20 @@ def build_pdf(input_path, state_file, output_path):
         page.apply_redactions()  # single call removes all originals
 
         # --- Phase 2: Register CJK font ---
-        font_path = "/System/Library/Fonts/ヒラギノ角ゴシック W8.ttc"
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        local_font_path = os.path.join(project_root, "NotoSansJP-Regular.ttf")
+        system_font_path = "/System/Library/Fonts/ヒラギノ角ゴシック W8.ttc"
+        
         try:
-            if os.path.exists(font_path):
-                page.insert_font(fontname="jpfont", fontfile=font_path)
+            if os.path.exists(local_font_path):
+                page.insert_font(fontname="jpfont", fontfile=local_font_path)
+            elif os.path.exists(system_font_path):
+                page.insert_font(fontname="jpfont", fontfile=system_font_path)
             else:
                 cjk_font = fitz.Font("cjk")
                 page.insert_font(fontname="jpfont", fontbuffer=cjk_font.buffer)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Failed to register font: {e}")
 
         # --- Phase 3: Draw translated text ---
         for data in page_blocks:

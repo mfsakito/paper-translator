@@ -56,11 +56,12 @@ def evaluate_translation(output_pdf_path, state_file):
             if norm_target in norm_page_text:
                 success_count += 1
             else:
-                # Fallback: check if at least 80% of the target is present
-                match = difflib.SequenceMatcher(
-                    None, norm_target, norm_page_text
-                ).find_longest_match(0, len(norm_target), 0, len(norm_page_text))
-                match_ratio = match.size / len(norm_target)
+                # Fallback: check if the text in the bounding box matches
+                rect = fitz.Rect(block["bbox"])
+                extracted_text = normalize_text(page.get_text("text", clip=rect))
+                
+                matcher = difflib.SequenceMatcher(None, norm_target, extracted_text)
+                match_ratio = matcher.ratio()
 
                 if match_ratio >= 0.8:
                     success_count += 1

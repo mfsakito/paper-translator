@@ -1,6 +1,7 @@
 import fitz  # PyMuPDF
 import json
 import os
+import re
 
 def load_state(state_file):
     if os.path.exists(state_file):
@@ -38,7 +39,9 @@ def extract_pdf_blocks(pdf_path, state_file, limit=None):
                         block_text += span.get("text", "")
                     block_text += "\n"
                 
-                block_text = block_text.replace("-\n", "").strip()
+                # Safely merge hyphenated words across lines
+                block_text = re.sub(r'([a-zA-Z])-\n([a-zA-Z])', r'\1\2', block_text)
+                block_text = block_text.strip()
                 if len(block_text) < 2:
                     continue
                 

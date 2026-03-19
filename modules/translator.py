@@ -37,20 +37,32 @@ def translate_blocks(state_file):
         
         print(f"Translating block {bid} ({len(original)} chars)...")
         try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt_template + original,
-            )
-            
-            translated = response.text.strip()
-            
-            if translated:
-                block_data["translated_text"] = translated
-                block_data["status"] = "translated"
-            else:
-                block_data["status"] = "error"
-                print(f"Warning: Empty translation returned for {bid}")
-                
+            # Exponential backoff loop
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt_template + original,
+                    )
+                    translated = response.text.strip()
+                    
+                    if translated:
+                        block_data["translated_text"] = translated
+                        block_data["status"] = "translated"
+                    else:
+                        block_data["status"] = "error"
+                        print(f"Warning: Empty translation returned for {bid}")
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    if "429" in str(e) and attempt < max_retries - 1:
+                        wait_time = 2 ** attempt
+                        print(f"Rate limit hit on {bid}, retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        raise e  # Re-raise if not 429 or max retries reached
+
         except Exception as e:
             print(f"Translation error on {bid}: {e}")
             block_data["status"] = "error"

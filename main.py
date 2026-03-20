@@ -2,34 +2,17 @@ import argparse
 import os
 import sys
 
-from modules.extractor import extract_pdf_blocks
+import fitz
+from pdf2docx import Converter
+
+from modules.extractor import extract_docx_blocks
 from modules.translator import translate_blocks
-from modules.builder import build_pdf
-from modules.evaluator import evaluate_translation
-
-
-def suppress_mupdf_output():
-    """Redirect both stdout and stderr fd to /dev/null to silence MuPDF C-level warnings."""
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    saved_stdout = os.dup(1)
-    saved_stderr = os.dup(2)
-    os.dup2(devnull, 1)
-    os.dup2(devnull, 2)
-    os.close(devnull)
-    return saved_stdout, saved_stderr
-
-
-def restore_output(saved):
-    """Restore stdout and stderr after MuPDF operations."""
-    saved_stdout, saved_stderr = saved
-    os.dup2(saved_stdout, 1)
-    os.dup2(saved_stderr, 2)
-    os.close(saved_stdout)
-    os.close(saved_stderr)
-
+from modules.builder import build_docx
 
 def main():
-    parser = argparse.ArgumentParser(description="PDF Translator V2 with Auto-Evaluation")
+    fitz.TOOLS.mupdf_display_errors(False)
+    
+    parser = argparse.ArgumentParser(description="PDF Translator using Word conversion for Layout")
     parser.add_argument("pdf", help="Path to input PDF")
     parser.add_argument("--limit", type=int, help="Limit number of pages")
     parser.add_argument("--state", default="temp/state.json", help="Path to state file")
@@ -46,39 +29,34 @@ def main():
 
     os.makedirs(os.path.dirname(state_file), exist_ok=True)
     os.makedirs("output", exist_ok=True)
+    os.makedirs("temp", exist_ok=True)
 
     base_name = os.path.basename(input_pdf)
     name, ext = os.path.splitext(base_name)
-    output_pdf = os.path.join("output", f"{name}_translated{ext}")
-
+    
+    temp_docx = os.path.join("temp", f"{name}_temp.docx")
+    output_docx = os.path.join("output", f"{name}_translated.docx")
+    
     print("\n=== Pipeline Run ===")
     
-    # 1. Extract (suppress MuPDF noise)
-    saved = suppress_mupdf_output()
-    extract_pdf_blocks(input_pdf, state_file, limit)
-    restore_output(saved)
+    print(f"1. Converting PDF to Word format... ({input_pdf} -> {temp_docx})")
+    cv = Converter(input_pdf)
+    cv.convert(temp_docx, start=0, end=limit)
+    cv.close()
     
-    # 2. Translate
+    print("\n2. Extracting Word blocks...")
+    extract_docx_blocks(temp_docx, state_file)
+    
+    print("\n3. Translating blocks...")
     translate_blocks(state_file)
     
-    # 3. Build (suppress MuPDF noise)
-    saved = suppress_mupdf_output()
-    success = build_pdf(input_pdf, state_file, output_pdf)
-    restore_output(saved)
+    print("\n4. Building final Word document...")
+    success = build_docx(temp_docx, state_file, output_docx)
     if not success:
-        print("Failed to build PDF. Exiting...")
+        print("Failed to build Word document. Exiting...")
         sys.exit(1)
         
-    # 4. Evaluate (suppress MuPDF noise)
-    saved = suppress_mupdf_output()
-    accuracy, failed_blocks = evaluate_translation(output_pdf, state_file)
-    restore_output(saved)
-    
-    if accuracy >= 80.0:
-        print(f"\nTarget accuracy achieved ({accuracy:.1f}%). Translation completed!")
-    else:
-        print(f"\nAccuracy ({accuracy:.1f}%) is below 80%. Pipeline finished.")
-
+    print(f"\nPipeline finished. Check output at {output_docx}")
 
 if __name__ == "__main__":
     main()

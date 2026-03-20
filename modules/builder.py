@@ -1,5 +1,6 @@
 import fitz
 import os
+import docx
 from .extractor import load_state
 
 
@@ -20,6 +21,9 @@ def build_pdf(input_path, state_file, output_path):
     blocks_by_page = {}
     for bid, data in state.items():
         if data["status"] == "translated":
+            # [翻訳済]タグがついた変換前テキストは除外する
+            if "[翻訳済]" in data["translated_text"]:
+                continue
             p = data["page"]
             blocks_by_page.setdefault(p, [])
             blocks_by_page[p].append(data)
@@ -80,4 +84,37 @@ def build_pdf(input_path, state_file, output_path):
     doc.save(output_path)
     doc.close()
     print(f"[Builder] Successfully built translated PDF at {output_path}")
+    return True
+
+def build_docx(input_docx_path, state_file, output_docx_path):
+    """
+    Creates a new docx with translated text overlaid on the original document.
+    """
+    if not os.path.exists(input_docx_path):
+        print(f"[Builder] Error: Input file '{input_docx_path}' not found.")
+        return False
+
+    state = load_state(state_file)
+    doc = docx.Document(input_docx_path)
+
+    def process_paragraphs(paragraphs, prefix):
+        for i, p in enumerate(paragraphs):
+            block_id = f"{prefix}_p{i}"
+            if block_id in state and state[block_id]["status"] == "translated":
+                # [翻訳済]タグがついた変換前テキストはレイアウト崩れの原因になるため除外（置換をスキップ）する
+                if "[翻訳済]" in state[block_id]["translated_text"]:
+                    continue
+                p.text = state[block_id]["translated_text"]
+
+    process_paragraphs(doc.paragraphs, "body")
+    
+    for t_idx, table in enumerate(doc.tables):
+        for r_idx, row in enumerate(table.rows):
+            for c_idx, cell in enumerate(row.cells):
+                prefix = f"t{t_idx}_r{r_idx}_c{c_idx}"
+                process_paragraphs(cell.paragraphs, prefix)
+
+    os.makedirs(os.path.dirname(output_docx_path) or ".", exist_ok=True)
+    doc.save(output_docx_path)
+    print(f"[Builder] Successfully built translated Word document at {output_docx_path}")
     return True

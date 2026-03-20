@@ -2,6 +2,8 @@ import fitz  # PyMuPDF
 import json
 import os
 import re
+import docx
+
 
 def load_state(state_file):
     if os.path.exists(state_file):
@@ -65,4 +67,48 @@ def extract_pdf_blocks(pdf_path, state_file, limit=None):
 
     save_state(state, state_file)
     print(f"[Extractor] Extracted/Updated {len(current_ids)} text blocks from {num_pages} pages.")
+    return state
+
+def extract_docx_blocks(docx_path, state_file):
+    """
+    Extracts text paragraphs from the docx file (both body and tables),
+    and updates the state file.
+    """
+    doc = docx.Document(docx_path)
+    state = load_state(state_file)
+    
+    current_ids = set()
+    
+    def process_paragraphs(paragraphs, prefix):
+        for i, p in enumerate(paragraphs):
+            text = p.text.strip()
+            if len(text) < 2:
+                continue
+            
+            block_id = f"{prefix}_p{i}"
+            current_ids.add(block_id)
+            
+            if block_id not in state:
+                state[block_id] = {
+                    "id": block_id,
+                    "original_text": text,
+                    "translated_text": "",
+                    "status": "pending",
+                    "retry_count": 0
+                }
+            else:
+                state[block_id]["original_text"] = text
+
+    # Process body paragraphs
+    process_paragraphs(doc.paragraphs, "body")
+    
+    # Process table paragraphs
+    for t_idx, table in enumerate(doc.tables):
+        for r_idx, row in enumerate(table.rows):
+            for c_idx, cell in enumerate(row.cells):
+                prefix = f"t{t_idx}_r{r_idx}_c{c_idx}"
+                process_paragraphs(cell.paragraphs, prefix)
+                
+    save_state(state, state_file)
+    print(f"[Extractor] Extracted/Updated {len(current_ids)} text blocks from Word document.")
     return state

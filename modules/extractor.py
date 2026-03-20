@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import pymupdf
 import pymupdf4llm
 
 
@@ -27,12 +28,18 @@ def extract_markdown_blocks(pdf_path, state_file, limit=None):
     image_dir = os.path.join(temp_dir, "images")
     os.makedirs(image_dir, exist_ok=True)
     
-    md_text = pymupdf4llm.to_markdown(
-        pdf_path,
-        pages=pages,
-        write_images=True,
-        image_path=image_dir,
-    )
+    # Suppress benign MuPDF warnings for unknown PDF operators (e.g. bcolor, ecolor)
+    # These are Adobe-proprietary extensions that MuPDF doesn't support but can safely ignore.
+    pymupdf.TOOLS.mupdf_display_errors(False)
+    try:
+        md_text = pymupdf4llm.to_markdown(
+            pdf_path,
+            pages=pages,
+            write_images=True,
+            image_path=image_dir,
+        )
+    finally:
+        pymupdf.TOOLS.mupdf_display_errors(True)
     
     # Save full markdown for debugging
     md_path = os.path.join(temp_dir, "extracted.md")

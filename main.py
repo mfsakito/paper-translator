@@ -2,17 +2,12 @@ import argparse
 import os
 import sys
 
-import fitz
-from pdf2docx import Converter
-
-from modules.extractor import extract_docx_blocks
+from modules.extractor import extract_markdown_blocks
 from modules.translator import translate_blocks
-from modules.builder import build_docx
+from modules.builder import build_docx_from_markdown
 
 def main():
-    fitz.TOOLS.mupdf_display_errors(False)
-    
-    parser = argparse.ArgumentParser(description="PDF Translator using Word conversion for Layout")
+    parser = argparse.ArgumentParser(description="PDF Translator using pymupdf4llm + python-docx")
     parser.add_argument("pdf", help="Path to input PDF")
     parser.add_argument("--limit", type=int, help="Limit number of pages")
     parser.add_argument("--state", default="temp/state.json", help="Path to state file")
@@ -29,29 +24,21 @@ def main():
 
     os.makedirs(os.path.dirname(state_file), exist_ok=True)
     os.makedirs("output", exist_ok=True)
-    os.makedirs("temp", exist_ok=True)
 
     base_name = os.path.basename(input_pdf)
-    name, ext = os.path.splitext(base_name)
-    
-    temp_docx = os.path.join("temp", f"{name}_temp.docx")
+    name, _ = os.path.splitext(base_name)
     output_docx = os.path.join("output", f"{name}_translated.docx")
     
     print("\n=== Pipeline Run ===")
     
-    print(f"1. Converting PDF to Word format... ({input_pdf} -> {temp_docx})")
-    cv = Converter(input_pdf)
-    cv.convert(temp_docx, start=0, end=limit)
-    cv.close()
+    print(f"\n1. Extracting Markdown from PDF... ({input_pdf})")
+    extract_markdown_blocks(input_pdf, state_file, limit=limit)
     
-    print("\n2. Extracting Word blocks...")
-    extract_docx_blocks(temp_docx, state_file)
-    
-    print("\n3. Translating blocks...")
+    print("\n2. Translating sections...")
     translate_blocks(state_file)
     
-    print("\n4. Building final Word document...")
-    success = build_docx(temp_docx, state_file, output_docx)
+    print("\n3. Building final Word document...")
+    success = build_docx_from_markdown(state_file, output_docx)
     if not success:
         print("Failed to build Word document. Exiting...")
         sys.exit(1)

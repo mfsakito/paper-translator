@@ -7,6 +7,7 @@ from .extractor import load_state, save_state
 
 load_dotenv()
 
+
 def get_gemini_client():
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -14,13 +15,14 @@ def get_gemini_client():
         sys.exit(1)
     return genai.Client(api_key=api_key)
 
+
 def translate_blocks(state_file):
     """
     Iterates through the state file and translates any blocks marked 'pending' or 'error'.
     """
     state = load_state(state_file)
     client = get_gemini_client()
-    
+
     prompt_template = """あなたは学術論文の専門翻訳アシスタントです。以下の英語テキスト（Markdown形式）を自然な日本語に翻訳してください。
 
 【重要なルール】
@@ -32,13 +34,15 @@ def translate_blocks(state_file):
 対象テキスト:
 """
 
-    blocks_to_translate = [bid for bid, data in state.items() if data["status"] in ["pending", "error"]]
+    blocks_to_translate = [
+        bid for bid, data in state.items() if data["status"] in ["pending", "error"]
+    ]
     print(f"[Translator] Found {len(blocks_to_translate)} blocks to translate.")
 
     for bid in blocks_to_translate:
         block_data = state[bid]
         original = block_data["original_text"]
-        
+
         print(f"Translating block {bid} ({len(original)} chars)...")
         try:
             # Exponential backoff loop
@@ -46,11 +50,11 @@ def translate_blocks(state_file):
             for attempt in range(max_retries):
                 try:
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model="gemini-3.1-flash-lite-preview",
                         contents=prompt_template + original,
                     )
                     translated = response.text.strip()
-                    
+
                     if translated:
                         block_data["translated_text"] = translated
                         block_data["status"] = "translated"
@@ -58,10 +62,10 @@ def translate_blocks(state_file):
                         block_data["status"] = "error"
                         print(f"Warning: Empty translation returned for {bid}")
                     break  # Success, exit retry loop
-                    
+
                 except Exception as e:
                     if "429" in str(e) and attempt < max_retries - 1:
-                        wait_time = 2 ** attempt
+                        wait_time = 2**attempt
                         print(f"Rate limit hit on {bid}, retrying in {wait_time}s...")
                         time.sleep(wait_time)
                     else:
@@ -74,7 +78,7 @@ def translate_blocks(state_file):
 
         # Save state incrementally to avoid data loss on crash
         save_state(state, state_file)
-        time.sleep(1) # Basic rate limit handling
+        time.sleep(1)  # Basic rate limit handling
 
     print("[Translator] Translation pass complete.")
     return state
